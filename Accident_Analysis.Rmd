@@ -1,0 +1,134 @@
+---
+title: "Accident Analysis"
+author: "蔡宇媗(組別：馬路如虎口 獅子大開口)"
+date: "2022-12-13"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+下載套件(下載一次即可)
+here套件可允許載入含中文名稱的資料，讀取路徑與此Rmd檔案為同一資料夾
+aTSA、TSA為時間序列套件，處理發生時間用
+```{r}
+#install.packages('here')
+#install.packages('aTSA')
+#install.packages('TSA')
+```
+
+資料下載：都是清洗過後的資料，包含：
+1. 雙方性別
+2. 雙方交通工具：按照法律規定分為汽車、機慢車、行人、職業駕駛(雖已廢除，但小組想驗證是否這點已經沒有影響力)
+3. 雙方經濟狀況：分為較佳(富裕及小康)、普通、較差(清寒及貧窮)三個類別
+4. 請求人身分：法定上配偶、子女與父母有慰撫金的請求權
+5. 正式資料：包含日期、鑑定會給予責任(分為被告責任較重、被告同等責任、被告責任較輕三個類別)、請求金額與前面經檢定為顯著且與其他變數獨立的自變數
+```{r}
+library(here)
+CSV1<-here::here("gender.csv") #性別
+gender<-read.csv(CSV1,header=TRUE, sep=",",fileEncoding = 'BIG5')
+head(gender)
+
+CSV2<-here::here("transportation.csv") #交通工具
+trans<-read.csv(CSV2,header=TRUE, sep=",",fileEncoding = 'BIG5')
+head(trans)
+
+CSV3<-here::here("socialstatus.csv") #經濟狀況
+socialstatus<-read.csv(CSV3,header=TRUE, sep=",",fileEncoding = 'BIG5')
+head(socialstatus)
+
+CSV4<-here::here("people.csv") #請求人身分 
+identity<-read.csv(CSV4,header=TRUE, sep=",",fileEncoding = 'BIG5')
+head(identity)
+
+CSV5<-here::here("date.csv") #正式資料
+date<-read.csv(CSV5,header=TRUE, sep=",",fileEncoding = 'BIG5')
+head(date)
+
+
+```
+
+1. 性別的相關性檢定(不顯著)
+使用線性迴歸，若coefficients的p-value小於0.05，即為顯著，該變數與判決的慰撫金有相關
+金額的變數包含自變數「請求慰撫金」與應變數「最終判決慰撫金」為了讓數據分布趨於常態，因此取log10
+
+```{r}
+money<-log10(gender$慰撫金) #log10轉換慰撫金數值
+#線性迴歸
+glm1<-glm(money~gender$被告性別,family=gaussian(),data=gender)
+summary(glm1)
+glm11<-glm(money~gender$原告性別,family=gaussian(),data=gender)
+summary(glm11)
+```
+
+2.  雙方交通工具相關性檢定(被告為職業駕駛時顯著)
+```{r}
+#交通工具差異
+glm2<-glm(money~trans$被告職業駕駛+
+               trans$被告機慢車+trans$被告汽車+trans$原告行人+
+               trans$原告機慢車+trans$原告汽車,family=gaussian(),data=trans)
+summary(glm2) 
+```
+
+3. 雙方經濟狀況：
+被告較佳、被告較差、原告中等原被告經濟差距明顯拿到較少慰撫金
+考量其他類別與「原被告經濟差距」皆有關係，所以取經濟差距的變數放入最終線性迴歸
+```{r}
+glm3<-glm(money~
+            socialstatus$被告較佳+socialstatus$被告中等
+         +socialstatus$被告較差+socialstatus$原告較佳+
+            socialstatus$原告中等+socialstatus$原告較差
+,family=gaussian(),data=socialstatus)
+summary(glm3) 
+glm31<-glm(money~socialstatus$原被告差距,family=gaussian(),data=socialstatus)
+summary(glm31)
+```
+
+4. 請求人身分(不論是哪種身分，皆顯著)
+```{r}
+chisq.test(identity$請求權人子女,money) 
+chisq.test(identity$請求權人父母,money)
+glm4<-glm(money~identity$請求權人子女,family=gaussian(),data=identity)
+summary(glm4)
+glm41<-glm(money~identity$請求權人父母,family=gaussian(),data=identity)
+summary(glm41) #都顯著
+```
+
+5. 正式資料：
+先使用單根檢定(Unit Root Test)確認判決金額沒有隨著事故發生時間產生變高或是變低的趨勢
+
+再將(A)鑑定會給予責任、請求金額與前面經檢定為顯著(與判決金額相關)且與其他變數獨立的自變數加入線性迴歸模型
+(B)移除請求金額，加入職業駕駛成為另一個線性迴歸模型
+
+考量到變數間因果關係難以釐清，且已盡量使變數間為獨立(互不影響)，所以不加入交互作用項(交互作用項：例如責任*職業駕駛兩個以上變數乘積的變項)
+```{r}
+library(aTSA)
+library(TSA)
+money<-log10(date$慰撫金金額)
+adf.test(money) #通過-沒有時間效應
+#畫圖
+plot(money,type="o")
+title("Date")
+```
+
+```{r}
+#線性迴歸一
+askmoney<-log10(date$請求慰撫金金額)
+linearglm<-glm(money~date$被告責任較重+date$被告責任同等+date$被告責任較輕
+               +askmoney+date$原被告差距,family=gaussian(),data=date)
+summary(linearglm)
+```
+
+```{r}
+#線性迴歸二
+linearglm2<-glm(money~date$被告責任較重+date$被告責任同等+date$被告責任較輕
+               +date$原被告差距+date$被告職業駕駛,family=gaussian(),data=date)
+summary(linearglm2) 
+```
+
+補充：身分、職業駕駛與請求金額有高度相關(卡方檢定p-value < 0.05)，故這兩個變數不與請求金額出現在同一個模型
+```{r}
+chisq.test(identity$請求權人父母,askmoney) #身分與請求金額有高度相關
+chisq.test(askmoney,date$被告職業駕駛) #職業駕駛與請求金額有高度相關
+```
+
