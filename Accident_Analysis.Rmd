@@ -3,8 +3,8 @@ title: "Accident Analysis"
 author: "蔡宇媗(組別：馬路如虎口 獅子大開口)"
 date: "2022-12-13"
 output:
-  word_document: default
   html_document: default
+  word_document: default
   pdf_document: default
 ---
 
@@ -92,6 +92,8 @@ glm4<-glm(money~identity$請求權人子女,family=gaussian(),data=identity)
 summary(glm4)
 glm41<-glm(money~identity$請求權人父母,family=gaussian(),data=identity)
 summary(glm41) #都顯著
+glm42<-glm(money~identity$請求權人人數,family=gaussian(),data=identity)
+summary(glm42) #都顯著
 ```
 
 5. 正式資料：
@@ -122,13 +124,23 @@ summary(linearglm)
 ```{r}
 #線性迴歸二
 linearglm2<-glm(money~date$被告責任較重+date$被告責任同等+date$被告責任較輕
-               +date$原被告差距+date$被告職業駕駛,family=gaussian(),data=date)
+                +date$原被告差距+date$被告職業駕駛+date$請求權人人數,
+               family=gaussian(),data=date)
 summary(linearglm2) 
+```
+```{r}
+linearglm3<-glm(money~date$被告責任較重+date$被告責任同等+date$被告責任較輕+identity$請求權人父母+
+               identity$請求權人子女+date$原被告差距+date$被告職業駕駛,
+               family=gaussian(),data=date)
+summary(linearglm3) 
 ```
 
 補充：身分、職業駕駛與請求金額有高度相關(卡方檢定p-value < 0.05)，故這兩個變數不與請求金額出現在同一個模型
 ```{r}
 chisq.test(identity$請求權人父母,askmoney) #身分與請求金額有高度相關
 chisq.test(askmoney,date$被告職業駕駛) #職業駕駛與請求金額有高度相關
+chisq.test(askmoney,date$請求權人人數)
+chisq.test(identity$請求權人子女,date$請求權人人數) #請求權人身分與人數有相關
+chisq.test(identity$請求權人父母,date$請求權人人數) 
 ```
 
